@@ -1,0 +1,291 @@
+CREATE DATABASE IF NOT EXISTS resultgpa2_new_data;
+USE resultgpa2_new_data;
+
+CREATE TABLE Students (
+  student_id INT AUTO_INCREMENT PRIMARY KEY,
+  roll_no VARCHAR(20) NOT NULL UNIQUE,
+  name VARCHAR(100) NOT NULL,
+  date_of_birth DATE,
+  department VARCHAR(50),
+  admission_year INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE Semesters (
+  semester_id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(20) NOT NULL,
+  start_date DATE,
+  end_date DATE
+);
+
+CREATE TABLE Courses (
+  course_id INT AUTO_INCREMENT PRIMARY KEY,
+  course_code VARCHAR(20) NOT NULL UNIQUE,
+  title VARCHAR(200) NOT NULL,
+  credits DECIMAL(7,2) NOT NULL,
+  department VARCHAR(50),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE GradeScale (
+  letter VARCHAR(2) PRIMARY KEY,
+  point DECIMAL(4,2) NOT NULL,
+  pass_mark BOOLEAN
+);
+
+CREATE TABLE Enrollments (
+  enrollment_id INT AUTO_INCREMENT PRIMARY KEY,
+  student_id INT NOT NULL,
+  course_id INT NOT NULL,
+  semester_id INT NOT NULL,
+  grade VARCHAR(2),
+  grade_point DECIMAL(4,2),
+  is_pass BOOLEAN,
+  FOREIGN KEY (student_id) REFERENCES Students(student_id),
+  FOREIGN KEY (course_id) REFERENCES Courses(course_id),
+  FOREIGN KEY (semester_id) REFERENCES Semesters(semester_id),
+  UNIQUE (student_id, course_id, semester_id)
+);
+
+CREATE TABLE StudentSemesterResult (
+  student_id INT,
+  semester_id INT,
+  sgpa DECIMAL(5,3),
+  total_credits DECIMAL(9,2),
+  PRIMARY KEY (student_id, semester_id),
+  FOREIGN KEY (student_id) REFERENCES Students(student_id),
+  FOREIGN KEY (semester_id) REFERENCES Semesters(semester_id)
+);
+
+CREATE TABLE StudentCGPA (
+  student_id INT PRIMARY KEY,
+  cgpa DECIMAL(5,3),
+  total_credits DECIMAL(9,2),
+  FOREIGN KEY (student_id) REFERENCES Students(student_id)
+);
+
+DELIMITER $$
+
+CREATE TRIGGER trg_after_enroll_insert
+AFTER INSERT ON Enrollments
+FOR EACH ROW
+BEGIN
+  DECLARE _sgpa DECIMAL(5,3);
+  DECLARE _tot_cred DECIMAL(9,2);
+  DECLARE _cgpa DECIMAL(5,3);
+  DECLARE _cgpa_credits DECIMAL(9,2);
+
+  SELECT
+    SUM(c.credits * e.grade_point) / NULLIF(SUM(c.credits), 0),
+    SUM(c.credits)
+  INTO _sgpa, _tot_cred
+  FROM Enrollments e
+  JOIN Courses c ON e.course_id = c.course_id
+  WHERE e.student_id = NEW.student_id
+    AND e.semester_id = NEW.semester_id;
+
+  INSERT INTO StudentSemesterResult (student_id, semester_id, sgpa, total_credits)
+    VALUES (NEW.student_id, NEW.semester_id, _sgpa, _tot_cred)
+    ON DUPLICATE KEY UPDATE
+      sgpa = _sgpa,
+      total_credits = _tot_cred;
+
+  SELECT
+    SUM(c.credits * e.grade_point) / NULLIF(SUM(c.credits), 0),
+    SUM(c.credits)
+  INTO _cgpa, _cgpa_credits
+  FROM Enrollments e
+  JOIN Courses c ON e.course_id = c.course_id
+  WHERE e.student_id = NEW.student_id;
+
+  INSERT INTO StudentCGPA (student_id, cgpa, total_credits)
+    VALUES (NEW.student_id, _cgpa, _cgpa_credits)
+    ON DUPLICATE KEY UPDATE
+      cgpa = _cgpa,
+      total_credits = _cgpa_credits;
+END $$
+
+CREATE TRIGGER trg_after_enroll_update
+AFTER UPDATE ON Enrollments
+FOR EACH ROW
+BEGIN
+  DECLARE _sgpa DECIMAL(5,3);
+  DECLARE _tot_cred DECIMAL(9,2);
+  DECLARE _cgpa DECIMAL(5,3);
+  DECLARE _cgpa_credits DECIMAL(9,2);
+
+  SELECT
+    SUM(c.credits * e.grade_point) / NULLIF(SUM(c.credits), 0),
+    SUM(c.credits)
+  INTO _sgpa, _tot_cred
+  FROM Enrollments e
+  JOIN Courses c ON e.course_id = c.course_id
+  WHERE e.student_id = NEW.student_id
+    AND e.semester_id = NEW.semester_id;
+
+  INSERT INTO StudentSemesterResult (student_id, semester_id, sgpa, total_credits)
+    VALUES (NEW.student_id, NEW.semester_id, _sgpa, _tot_cred)
+    ON DUPLICATE KEY UPDATE
+      sgpa = _sgpa,
+      total_credits = _tot_cred;
+
+  SELECT
+    SUM(c.credits * e.grade_point) / NULLIF(SUM(c.credits), 0),
+    SUM(c.credits)
+  INTO _cgpa, _cgpa_credits
+  FROM Enrollments e
+  JOIN Courses c ON e.course_id = c.course_id
+  WHERE e.student_id = NEW.student_id;
+
+  INSERT INTO StudentCGPA (student_id, cgpa, total_credits)
+    VALUES (NEW.student_id, _cgpa, _cgpa_credits)
+    ON DUPLICATE KEY UPDATE
+      cgpa = _cgpa,
+      total_credits = _cgpa_credits;
+END $$
+
+DELIMITER ;
+
+INSERT INTO Semesters (name, start_date, end_date) VALUES
+  ('2024-1', '2024-01-15', '2024-05-30'),
+  ('2024-2', '2024-07-01', '2024-11-15');
+
+INSERT INTO Students (roll_no, name, date_of_birth, department, admission_year) VALUES
+  ('R022', 'John Doe', '2004-01-15', 'BCA Regular', 2023),
+  ('R023', 'Jane Smith', '2003-02-20', 'BCA Regular', 2023),
+  ('R024', 'Peter Jones', '2004-03-25', 'BCA Data Science', 2023),
+  ('R025', 'Emily White', '2004-04-30', 'BCA Regular', 2023),
+  ('R026', 'Chris Miller', '2003-05-05', 'BCA Data Science', 2023),
+  ('R027', 'Sarah Davis', '2004-06-10', 'BCA Regular', 2023),
+  ('R028', 'Mark Wilson', '2003-07-15', 'BCA Regular', 2023),
+  ('R029', 'Laura Brown', '2004-08-20', 'BCA Data Science', 2023),
+  ('R030', 'Michael Taylor', '2004-09-25', 'BCA Regular', 2023),
+  ('R031', 'Jessica Lee', '2003-10-30', 'BCA Data Science', 2023),
+  ('R032', 'David Rodriguez', '2004-11-05', 'BCA Regular', 2023),
+  ('R033', 'Michelle Green', '2003-12-10', 'BCA Data Science', 2023),
+  ('R034', 'Kevin Hall', '2004-01-15', 'BCA Regular', 2023),
+  ('R035', 'Rachel King', '2003-02-20', 'BCA Data Science', 2023),
+  ('R036', 'Daniel Wright', '2004-03-25', 'BCA Regular', 2023),
+  ('R037', 'Ashley Lopez', '2003-04-30', 'BCA Data Science', 2023),
+  ('R038', 'Robert Scott', '2004-05-05', 'BCA Regular', 2023),
+  ('R039', 'Megan Hill', '2003-06-10', 'BCA Data Science', 2023),
+  ('R040', 'Joshua Adams', '2004-07-15', 'BCA Regular', 2023),
+  ('R041', 'Kimberly Baker', '2003-08-20', 'BCA Data Science', 2023),
+  ('R042', 'Steven Carter', '2004-09-25', 'BCA Regular', 2023);
+
+INSERT INTO Courses (course_code, title, credits, department) VALUES
+  ('CS201', 'Advanced Programming', 4.00, 'BCA Regular'),
+  ('CS202', 'Database Management Systems', 4.00, 'BCA Regular'),
+  ('DS201', 'Data Mining', 3.00, 'BCA Data Science'),
+  ('DS202', 'Machine Learning', 3.00, 'BCA Data Science');
+
+INSERT INTO GradeScale (letter, point, pass_mark) VALUES
+  ('A', 4.00, TRUE),
+  ('B', 3.00, TRUE),
+  ('C', 2.00, TRUE),
+  ('D', 1.00, TRUE),
+  ('F', 0.00, FALSE);
+
+INSERT INTO Enrollments (student_id, course_id, semester_id, grade, grade_point, is_pass) VALUES
+(22, 1, 1, 'A', 4.00, TRUE),
+(22, 3, 2, 'B', 3.00, TRUE),
+(22, 2, 1, 'C', 2.00, TRUE),
+
+(23, 2, 1, 'B', 3.00, TRUE),
+(23, 4, 2, 'C', 2.00, TRUE),
+(23, 1, 1, 'F', 0.00, FALSE),
+
+(24, 1, 1, 'A', 4.00, TRUE),
+(24, 2, 2, 'A', 4.00, TRUE),
+(24, 4, 1, 'B', 3.00, TRUE),
+
+(25, 3, 1, 'D', 1.00, TRUE),
+(25, 1, 2, 'C', 2.00, TRUE),
+(25, 2, 1, 'B', 3.00, TRUE),
+
+(26, 2, 1, 'A', 4.00, TRUE),
+(26, 3, 2, 'C', 2.00, TRUE),
+(26, 1, 1, 'B', 3.00, TRUE),
+
+(27, 4, 1, 'A', 4.00, TRUE),
+(27, 1, 2, 'B', 3.00, TRUE),
+(27, 3, 1, 'A', 4.00, TRUE),
+
+(28, 2, 2, 'C', 2.00, TRUE),
+(28, 4, 1, 'A', 4.00, TRUE),
+(28, 1, 1, 'B', 3.00, TRUE),
+
+(29, 1, 1, 'D', 1.00, TRUE),
+(29, 3, 1, 'C', 2.00, TRUE),
+(29, 2, 2, 'B', 3.00, TRUE),
+
+(30, 3, 2, 'A', 4.00, TRUE),
+(30, 1, 1, 'B', 3.00, TRUE),
+(30, 2, 2, 'C', 2.00, TRUE),
+
+(31,4, 1, 'A', 4.00, TRUE),
+(31,1, 2, 'C', 2.00, TRUE),
+(31,3, 1, 'B', 3.00, TRUE),
+
+(32,2, 1, 'D', 1.00, TRUE),
+(32,3, 2, 'C', 2.00, TRUE),
+(32,1, 1, 'B', 3.00, TRUE),
+
+(33,4, 2, 'A', 4.00, TRUE),
+(33,2, 1, 'B', 3.00, TRUE),
+(33,3, 1, 'A', 4.00, TRUE),
+
+(34,1, 1, 'C', 2.00, TRUE),
+(34,4, 2, 'A', 4.00, TRUE),
+(34,2, 1, 'B', 3.00, TRUE),
+
+(35,3, 1, 'B', 3.00, TRUE),
+(35,1, 2, 'D', 1.00, TRUE),
+(35,4, 1, 'C', 2.00, TRUE),
+
+(36,2, 2, 'A', 4.00, TRUE),
+(36,3, 1, 'B', 3.00, TRUE),
+(36,1, 1, 'A', 4.00, TRUE),
+
+(37,4, 1, 'B', 3.00, TRUE),
+(37,1, 2, 'C', 2.00, TRUE),
+(37,2, 1, 'A', 4.00, TRUE),
+
+(38,3, 2, 'D', 1.00, TRUE),
+(38,4, 1, 'B', 3.00, TRUE),
+(38,1, 1, 'C', 2.00, TRUE),
+
+(39,2, 1, 'A', 4.00, TRUE),
+(39,3, 2, 'B', 3.00, TRUE),
+(39,4, 1, 'C', 2.00, TRUE),
+
+(40,1, 1, 'B', 3.00, TRUE),
+(40,4, 1, 'A', 4.00, TRUE),
+(40,2, 2, 'C', 2.00, TRUE),
+
+(41,3, 1, 'A', 4.00, TRUE),
+(41,4, 2, 'B', 3.00, TRUE),
+(41,1, 1, 'C', 2.00, TRUE),
+
+(42,2, 1, 'B', 3.00, TRUE),
+(42,3, 2, 'C', 2.00, TRUE),
+(42,4, 1, 'A', 4.00, TRUE);
+
+-- Query to show new data
+SELECT * FROM Students;
+SELECT * FROM Courses;
+SELECT * FROM Semesters;
+
+
+-- Additional query to show student pass/fail counts
+SELECT
+  c.course_code,
+  s.name AS semester_name,
+  COUNT(CASE WHEN e.is_pass = TRUE THEN 1 END) AS passed,
+  COUNT(CASE WHEN e.is_pass = FALSE THEN 1 END) AS failed,
+  COUNT(*) AS total,
+  ROUND(COUNT(CASE WHEN e.is_pass = TRUE THEN 1 END) * 100.0 / COUNT(*), 2) AS pass_rate
+FROM Enrollments e
+JOIN Courses c ON e.course_id = c.course_id
+JOIN Semesters s ON e.semester_id = s.semester_id
+GROUP BY c.course_code, s.name;
